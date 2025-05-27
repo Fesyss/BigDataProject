@@ -154,7 +154,7 @@ TODO: Evaluate model performance using test datasets and visualize results using
    pip install -r /path/to/requirements.txt
    ```
 
-4. Follow the steps in the **Methodology** section.
+4. Follow the steps in the [Methodology](#-methodology) section.
    **Note:** A Google BigQuery account is required.
 
 ---
