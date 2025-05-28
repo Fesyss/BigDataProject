@@ -140,7 +140,10 @@ FROM ML.FORECAST(
 
 ### 📊 Visualization
 
-TODO: Evaluate model performance using test datasets and visualize results using BI Engine and Looker Studio.
+The behavior and accuracy of both models are visualized in **Looker Studio**, with **BI Engine** enabling faster data processing.
+
+- 📈 **Linear Regression Model Report**: [View Report](https://lookerstudio.google.com/reporting/497d4408-2666-422f-98af-ea6c3e93e39c)
+- 📉 **ARIMA Model Report**: [View Report](https://lookerstudio.google.com/reporting/594abe36-34f3-47ea-9fc6-c36573f43415)
 
 ---
 
