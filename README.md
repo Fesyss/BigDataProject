@@ -127,12 +127,45 @@ OPTIONS(
 ) AS
 
 WITH base AS (
-  ...
+  SELECT
+    r.date,
+    r.currency_code,
+    r.pct_return,
+    u.pct_return AS usd_return,
+    e.pct_return AS eur_return
+  FROM
+    nbpcurrencyratesbdfinalproject.nbp_data.fx_pct_returns_clean r
+  JOIN
+    nbpcurrencyratesbdfinalproject.nbp_data.fx_pct_returns_clean u
+  ON
+    r.date = u.date AND u.currency_code = 'USD'
+  JOIN
+    nbpcurrencyratesbdfinalproject.nbp_data.fx_pct_returns_clean e
+  ON
+    r.date = e.date AND e.currency_code = 'EUR'
+  WHERE
+    r.currency_code IN ('PLN','HUF','CZK','GBP','JPY','AUD','CAD')
 )
 
 SELECT
   pct_return AS label,
-  ...
+
+  IF(currency_code='PLN', usd_return, 0) AS usd_pln,
+  IF(currency_code='HUF', usd_return, 0) AS usd_huf,
+  IF(currency_code='CZK', usd_return, 0) AS usd_czk,
+  IF(currency_code='GBP', usd_return, 0) AS usd_gbp,
+  IF(currency_code='JPY', usd_return, 0) AS usd_jpy,
+  IF(currency_code='AUD', usd_return, 0) AS usd_aud,
+  IF(currency_code='CAD', usd_return, 0) AS usd_cad,
+
+  IF(currency_code='PLN', eur_return, 0) AS eur_pln,
+  IF(currency_code='HUF', eur_return, 0) AS eur_huf,
+  IF(currency_code='CZK', eur_return, 0) AS eur_czk,
+  IF(currency_code='GBP', eur_return, 0) AS eur_gbp,
+  IF(currency_code='JPY', eur_return, 0) AS eur_jpy,
+  IF(currency_code='AUD', eur_return, 0) AS eur_aud,
+  IF(currency_code='CAD', eur_return, 0) AS eur_cad
+
 FROM
   base;
 ```
