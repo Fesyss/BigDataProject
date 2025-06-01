@@ -1,94 +1,103 @@
-# 📊 NBP Currency & Gold Forecasting — Big Data Final Project
+# 💱📈 Currency Forecasting and Economic Indicators using BigQuery ML
+
+## 📌 Project Description
+
+This project demonstrates how to build and evaluate machine learning models in **Google BigQuery ML** to forecast financial metrics and uncover correlations between economic indicators. We collect, clean, and analyze exchange rate, gold price, and weather data using a fully integrated **Google Cloud Platform (GCP)** pipeline. Three main models are trained to forecast trends and identify cross-variable relationships.
+
+---
 
 ## 🔍 Overview
 
-This project focuses on analyzing and forecasting financial time series — specifically, **currency exchange rates** and **gold prices in PLN** — while evaluating the **influence of environmental factors such as daily temperatures in Warsaw**.
-We use **BigQuery ML** to build two machine learning models:
+We developed the following models using **BigQuery ML**:
 
-- `fx_arima`: An ARIMA model for forecasting currency exchange rates.
-- `gold_temp_reg`: A linear regression model to predict gold prices based on weather data.
+* **`fx_arima`**: An ARIMA model used to forecast foreign exchange (FX) currency rates.
+* **`gold_temp_reg`**: A linear regression model predicting gold prices based on daily temperature in Warsaw.
+* **`usd_euro_arima_model`**: A regression model trained to quantify the influence of USD and EUR on other currencies. While we don’t use it for direct prediction, we analyze its learned weights to study cross-currency correlation.
 
 ---
 
 ## 🛠️ Methodology
 
-Data was collected from public APIs provided by the Polish National Bank (NBP) and Open-Meteo. All storage and processing were performed in the **BigQuery environment**, while results were visualized using **BI Engine** and **Looker Studio**. Except for the initial API sources, all tools used are Google Cloud services, allowing seamless integration across the data pipeline.
+### 🔗 Data Integration & Infrastructure
 
-### 📥 Data Ingestion
+We collected data from the **Polish National Bank (NBP)** and **Open-Meteo** APIs using **Python scripts deployed in Cloud Run**. The processed data is stored in BigQuery and visualized in **Looker Studio** with **BI Engine** acceleration. All components (besides the APIs) are part of the Google Cloud ecosystem, providing seamless integration.
 
-We began by extracting data from the APIs and uploading it to BigQuery.
+* 🔗 [BigQuery Project](https://console.cloud.google.com/bigquery?authuser=1&inv=1&invt=Aby-gw&project=nbpcurrencyratesbdfinalproject)
+* 🗂️ [Trello Project Board](https://trello.com/b/uzcKV8q8/big-data)
 
-#### 💱 Exchange Rates
+---
 
-The [`fetch_exchange_rates.py`](scripts/fetch_exchange_rates.py) script retrieves historical exchange rates from 2015 to the present via the [NBP API](https://api.nbp.pl/en.html). The data is uploaded to BigQuery under the table `nbp_data_raw.fx_history`.
+## 🌐 Data Collection
 
-#### 🪙 Gold Prices
+Data is gathered through scheduled scripts in Cloud Run, using the `google.cloud` Python package to write directly into BigQuery.
 
-The [`fetch_gold_history.py`](scripts/fetch_gold_history.py) script fetches gold prices for the same period and uploads them to `nbp_data_raw.gold_history_raw`.
+### 🌡️ Weather Data
 
-#### 🌡️ Weather Data
+* Source: [Open-Meteo](https://open-meteo.com/en/docs)
+* Location: Warsaw (`latitude=52.23`, `longitude=21.01`)
+* Metric: Hourly average temperature (`temperature_2m`)
+* Range: `2015-01-01` to present
+* Table: `nbp_data_raw.weather_warsaw_raw`
+* Script: `weatherwarsawfetchscript`
 
-Weather data for Warsaw (2015–2025) was manually downloaded from [Open-Meteo](https://open-meteo.com/en/docs) and uploaded to `nbp_data_raw.weather_warsaw_raw` (TODO: Automate this process via a script).
+### 💱 Currency and Gold Prices
 
-API configuration:
+* Source: National Bank of Poland (NBP)
+* Automatically fetched and written to:
 
-- Date range: `2015-01-01` to `today`
-- Location: `latitude=52.23`, `longitude=21.01` (Warsaw)
-- Metric: Daily average temperature (`temperature_2m_mean`)
-- Format: CSV
-- EU-hosted → No cross-region charges
+  * `nbp_data.fx_history`
+  * `nbp_data.fx_today`
+  * `nbp_data.gold_history`
 
-### 🧹 Data Cleaning
+---
 
-Most datasets were clean and required minimal preprocessing.
+## 🧹 Data Cleaning
 
-- **Exchange and gold price data:** Only required sorting by date for easier inspection and modeling. Cleaned versions are stored as:
+Minimal preprocessing was required. The `rawintoclean` function cleaned and sorted the datasets for consistency. Final cleaned tables include:
 
-  - `nbp_data.fx_history`
-  - `nbp_data.fx_today`
-  - `nbp_data.gold_history`
+* `nbp_data.fx_history`
+* `nbp_data.fx_today`
+* `nbp_data.gold_history`
+* `nbp_data.weather_warsaw`
 
-- **Weather data:** Required aggregation from hourly to daily averages. We also converted timestamps to date format, removed null entries, and sorted the data. The cleaned version is saved as `nbp_data.weather_warsaw`.
+### 📁 Intermediate Views
 
-### 🧾 Intermediate Tables
+* **`nbp_data.gold_temp_daily`**: Joins daily temperature with gold prices for regression training.
+* **`nbp_data.weather_daily_avg`**: Aggregates hourly temperatures into daily averages.
+* **`nbp_data.fx_pct_returns_clean`**: Computes daily percentage returns for currency exchange rates.
 
-We created a combined view `nbp_data.gold_temp` (TODO: Rename for clarity) to serve as training data for the regression model. It joins gold price and temperature by date:
+---
 
-```sql
-SELECT
-  g.effective_date,
-  g.price        AS gold_pln,
-  w.avg_celsius
-FROM   nbp_data.gold_history g
-JOIN   nbp_data.weather_warsaw w
-USING  (effective_date)
-WHERE  g.price IS NOT NULL
-  AND  w.avg_celsius IS NOT NULL
-```
+## 🤖 Model Training
 
-### 🤖 Model Training
+### 🔹 Gold Price Prediction — Linear Regression
 
-#### Linear Regression — Gold vs. Temperature
+Predicts gold prices using daily average temperature in Warsaw.
 
 ```sql
-CREATE OR REPLACE MODEL nbpcurrencyratesbdfinalproject.nbp_data_models.gold_temp_reg_model
-OPTIONS (
-  model_type='linear_reg',
-  input_label_cols=['gold_pln'],
-  data_split_method='NO_SPLIT'
+CREATE OR REPLACE MODEL
+  nbpcurrencyratesbdfinalproject.nbp_data_models.gold_temp_reg_model
+OPTIONS(
+  model_type       = 'linear_reg',
+  input_label_cols = ['gold_pln']
 ) AS
+
 SELECT
-  avg_celsius,
+  avg_temp,
   gold_pln
-FROM nbpcurrencyratesbdfinalproject.nbp_data.gold_temp
-WHERE gold_pln IS NOT NULL AND avg_celsius IS NOT NULL;
+FROM
+  nbpcurrencyratesbdfinalproject.nbp_data.gold_temp_daily;
 ```
 
-#### ARIMA — Currency Forecasting
+---
+
+### 🔹 Currency Forecasting — ARIMA Model
+
+Forecasts currency exchange rates using time series modeling.
 
 ```sql
 CREATE OR REPLACE MODEL nbpcurrencyratesbdfinalproject.nbp_data_models.fx_arima_model
-OPTIONS (
+OPTIONS(
   model_type='ARIMA_PLUS',
   time_series_timestamp_col='effective_date',
   time_series_data_col='mid',
@@ -103,65 +112,76 @@ WHERE mid IS NOT NULL
 ORDER BY effective_date;
 ```
 
-### 📈 Evaluation
+---
 
-Predictions were generated from both models for evaluation.
+### 🔹 Currency Correlation — Linear Regression
 
-#### Predicting Gold Price
+Analyzes the influence of USD and EUR on other currencies. The model is not used for forecasting, only to inspect weight coefficients.
 
 ```sql
-CREATE OR REPLACE TABLE nbpcurrencyratesbdfinalproject.nbp_data_models.gold_temp_predictions AS
+CREATE OR REPLACE MODEL
+  nbpcurrencyratesbdfinalproject.nbp_data_models.usd_euro_arima_domel
+OPTIONS(
+  model_type       = 'linear_reg',
+  input_label_cols = ['label']
+) AS
+
+WITH base AS (
+  ...
+)
+
 SELECT
-  avg_celsius,
-  gold_pln,
-  predicted_gold_pln
-FROM ML.PREDICT(
-  MODEL nbpcurrencyratesbdfinalproject.nbp_data_models.gold_temp_reg_model,
-  (
-    SELECT
-      avg_celsius,
-      gold_pln
-    FROM nbpcurrencyratesbdfinalproject.nbp_data.gold_temp
-    WHERE gold_pln IS NOT NULL AND avg_celsius IS NOT NULL
-  )
-);
+  pct_return AS label,
+  ...
+FROM
+  base;
 ```
-
-#### Forecasting Exchange Rates
-
-```sql
-CREATE OR REPLACE TABLE nbpcurrencyratesbdfinalproject.nbp_data_models.fx_arima_forecast AS
-SELECT *
-FROM ML.FORECAST(
-  MODEL nbpcurrencyratesbdfinalproject.nbp_data_models.fx_arima_model,
-  STRUCT(30 AS horizon) -- 30-day forecast
-);
-```
-
-### 📊 Visualization
-
-The behavior and accuracy of both models are visualized in **Looker Studio**, with **BI Engine** enabling faster data processing.
-
-- 📈 **Linear Regression Model Report**: [View Report](https://lookerstudio.google.com/reporting/497d4408-2666-422f-98af-ea6c3e93e39c)
-- 📉 **ARIMA Model Report**: [View Report](https://lookerstudio.google.com/reporting/594abe36-34f3-47ea-9fc6-c36573f43415)
 
 ---
 
-## 🧪 Reproducing Results
+## 📈 Evaluation
 
-1. Ensure Python is installed.
-2. Clone the repository.
-3. Install dependencies with:
+### 🔬 Forecasting Accuracy
 
-   ```bash
-   pip install -r /path/to/requirements.txt
-   ```
+* Predictions are generated using `arimaforecastmodel` and `automatitempgoldmodel` functions.
+* Accuracy is validated against historical data.
 
-4. Follow the steps in the [Methodology](#%EF%B8%8F-methodology) section.
-   **Note:** A Google BigQuery account is required.
+### 🔄 Correlation Analysis (Model Weights)
+
+* The USD/EUR model's weights reveal the strength of influence each currency has on others.
+* Extracted and analyzed via `automateusdandeuro`.
+
+### 📊 Correlation Analysis (Statistics)
+
+* Traditional metrics (CORR and COVAR\_POP) are also computed by `automateusdandeuro` to compare with the ML model.
 
 ---
 
-## 📌 Results and Conclusions
+## 📊 Visualization Dashboards
 
-TODO: Discuss and draw conclusions from the visualization results.
+Visualizations were created in **Looker Studio** with BigQuery's BI Engine for real-time rendering:
+
+* **Gold-Temperature Regression**: [View Report](https://lookerstudio.google.com/reporting/041cbbbb-aa2b-404f-8d19-70d5d2996a1e)
+* **ARIMA FX Forecasting**: [View Report](https://lookerstudio.google.com/reporting/594abe36-34f3-47ea-9fc6-c36573f43415)
+* **Currency Correlation Analysis**: [View Report](https://lookerstudio.google.com/reporting/28bb2adc-945a-49ae-9023-74db97ca15c5)
+
+---
+
+## ✅ Results & Conclusions
+
+* The **gold vs. temperature** linear regression model shows moderate predictive power. However, due to temperature's seasonal nature, its correlation with date makes it unclear whether it is temperature or time driving the prediction.
+
+* The **ARIMA currency forecasting** model provides consistent short-term forecasts, indicating the presence of underlying trends and temporal stability in FX rates.
+
+* The **currency correlation analysis** found that:
+
+  * **48%** of examined currencies are significantly correlated with **USD**
+  * **27%** show significant correlation with **EUR**
+  * Model weight analysis supports this, showing, for example:
+
+    * **CZK** is **12×** more influenced by EUR than USD
+    * **HUF** is **4×** more influenced by EUR
+    * **GBP** leans **1.6×** more toward EUR
+    * **CAD** is **2.5×** more correlated with USD
+
+---
